@@ -26,7 +26,7 @@ begin
 	# Total:
 	# 371 horas normales
 	#
-	# Dividido entre 11 vigilantes
+	# Dividido entre 10 vigilantes
 	#
 	H_bar = (28*h_norm_porteria + 21*h_movil) / length(I)
 
@@ -244,7 +244,7 @@ begin
 	    println("---- TURNOS DIURNOS ----")
 	    for p in P
 	        for i in I
-	            if value(xD[i,d,p]) > 0.5
+	            if value(xD[i,d,p]) > 0.5 #la eleccion del mayor en cambio de definir el =1 es por la forma de aproximar del solver
 	                println("Portería ", p,
 	                    " -> Vigilante ", i)
 	            end
