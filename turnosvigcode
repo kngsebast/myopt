@@ -1,0 +1,274 @@
+begin
+	model = Model(HiGHS.Optimizer)
+
+	# CONJUNTOS
+	
+	I = 1:10                    # Vigilantes
+	D = 1:7                     # Días
+	P = 1:2                     # Porterías
+	M = 1:3                     # Turnos móviles
+	
+	# PARÁMETROS
+	
+	h_norm_porteria = 8
+	h_extra_porteria = 3
+	h_movil = 8
+
+	
+	# Promedio teórico de horas normales
+	#
+	# 28 turnos de portería:
+	# 28 * 8 = 224
+	#
+	# 21 móviles:
+	# 21 * 7 = 147
+	#
+	# Total:
+	# 371 horas normales
+	#
+	# Dividido entre 11 vigilantes
+	#
+	H_bar = (28*h_norm_porteria + 21*h_movil) / length(I)
+
+	# Conversión índice global de móviles
+	
+	function indice_moviles(t)
+	    
+	    d = div(t - 1, 3) + 1
+	    m = mod(t - 1, 3) + 1
+	    
+	    return d, m
+	end
+	# VARIABLES
+	
+	# Turnos diurnos
+	@variable(model, xD[I, D, P], Bin)
+	
+	# Turnos nocturnos
+	@variable(model, xN[I, D, P], Bin)
+	
+	# Turnos móviles
+	@variable(model, xM[I, D, M], Bin)
+	
+	# Horas normales
+	@variable(model, Hnorm[I] >= 0)
+	
+	# Horas extra
+	@variable(model, Hextra[I] >= 0)
+	
+	# Desviación respecto al promedio
+	@variable(model, u[I] >= 0)
+
+	# FUNCIÓN OBJETIVO
+	
+	@objective(model, Min, sum(u[i] for i in I))
+	
+	# RESTRICCIONES
+	# 1. Balance de carga
+	
+	@constraint(model,
+	    [i in I],
+	    Hnorm[i] - H_bar <= u[i]
+	)
+	
+	@constraint(model,
+	    [i in I],
+	    H_bar - Hnorm[i] <= u[i]
+	)
+	
+	# 2. Cobertura porterías diurnas
+	
+	@constraint(model,
+	    [d in D, p in P],
+	    sum(xD[i,d,p] for i in I) == 1
+	)
+	
+	# 3. Cobertura porterías nocturnas
+	
+	@constraint(model,
+	    [d in D, p in P],
+	    sum(xN[i,d,p] for i in I) == 1
+	)
+	
+	# 4. Cobertura móviles
+	
+	@constraint(model,
+	    [d in D, m in M],
+	    sum(xM[i,d,m] for i in I) == 1
+	)
+	
+	# 5. Un turno por día por vigilante
+	
+	@constraint(model,
+	    [i in I, d in D],
+	    sum(xD[i,d,p] + xN[i,d,p] for p in P)
+	    +
+	    sum(xM[i,d,m] for m in M)
+	    <= 1
+	)
+	
+	# 6. Cálculo horas normales
+
+	
+	@constraint(model,
+	    [i in I],
+	    Hnorm[i] ==
+	    h_norm_porteria *
+	    sum(xD[i,d,p] + xN[i,d,p]
+	        for d in D, p in P)
+	    +
+	    h_movil *
+	    sum(xM[i,d,m]
+	        for d in D, m in M)
+	)
+	
+	# 7. Cálculo horas extra
+	
+	@constraint(model,
+	    [i in I],
+	    Hextra[i] ==
+	    h_extra_porteria *
+	    sum(xD[i,d,p] + xN[i,d,p]
+	        for d in D, p in P)
+	)
+	
+
+	# 8. Límite horas normales
+	
+	@constraint(model,
+	    [i in I],
+	    Hnorm[i] <= 44
+	)
+	
+
+	# 9. Límite horas extra
+	
+	@constraint(model,
+	    [i in I],
+	    Hextra[i] <= 12
+	)
+	
+	# 10. Día de descanso obligatorio
+	
+	@constraint(model,
+	    [i in I],
+	    sum(
+	        sum(xD[i,d,p] + xN[i,d,p] for p in P)
+	        +
+	        sum(xM[i,d,m] for m in M)
+	        for d in D
+	    ) <= 6
+	)
+	# Función auxiliar para d+
+	
+	function next_day(d)
+	    return d == 7 ? 1 : d + 1
+	end
+	
+	# 11. Descanso noche -> día
+	
+	@constraint(model,
+	    [i in I, d in D],
+	    sum(xN[i,d,p] for p in P)
+	    +
+	    sum(xD[i,next_day(d),p] for p in P)
+	    <= 1
+	)
+
+	# 12. Descanso noche -> móvil
+	
+	@constraint(model,
+	    [i in I, d in D],
+	    sum(xN[i,d,p] for p in P)
+	    +
+	    sum(xM[i,next_day(d),m] for m in M)
+	    <= 1
+	)
+
+	# 13. Separación entre móviles
+	
+	for i in I
+	    for t in 1:19
+	
+	        d1, m1 = indice_moviles(t)
+	        d2, m2 = indice_moviles(t + 1)
+	        d3, m3 = indice_moviles(t + 2)
+	
+	        @constraint(model,
+	            xM[i,d1,m1]
+	            +
+	            xM[i,d2,m2]
+	            +
+	            xM[i,d3,m3]
+	            <= 1
+	        )
+	    end
+	end
+	
+	optimize!(model)
+	
+	
+	println("\n================================================")
+	println("ESTADO DEL MODELO")
+	println("================================================")
+	println(termination_status(model))
+	
+	println("\n================================================")
+	println("FUNCIÓN OBJETIVO")
+	println("================================================")
+	println(objective_value(model))
+
+		println("\n================================================")
+	println("FUNCIÓN OBJETIVO")
+	println("================================================")
+	
+	println("\n================================================")
+	println("Promedio ", H_bar)
+	println("================================================")
+	
+	for i in I
+	    println("Vigilante ", i,
+	        " | Hnorm = ", value(Hnorm[i]),
+	        " | Hextra = ", value(Hextra[i]),
+	        " | Desviación = ", value(u[i]))
+	end
+	
+	println("\n================================================")
+	println("HORARIO")
+	println("================================================")
+	
+	for d in D
+	
+	    println("\nDÍA ", d)
+	
+	    println("---- TURNOS DIURNOS ----")
+	    for p in P
+	        for i in I
+	            if value(xD[i,d,p]) > 0.5
+	                println("Portería ", p,
+	                    " -> Vigilante ", i)
+	            end
+	        end
+	    end
+	
+	    println("---- TURNOS NOCTURNOS ----")
+	    for p in P
+	        for i in I
+	            if value(xN[i,d,p]) > 0.5
+	                println("Portería ", p,
+	                    " -> Vigilante ", i)
+	            end
+	        end
+	    end
+	
+	    println("---- TURNOS MÓVILES ----")
+	    for m in M
+	        for i in I
+	            if value(xM[i,d,m]) > 0.5
+	                println("Móvil ", m,
+	                    " -> Vigilante ", i)
+	            end
+	        end
+	    end
+	end
+end
