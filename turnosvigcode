@@ -1,4 +1,6 @@
 begin
+	using JuMP #libreria
+	using HiGHS #libreria
 	model = Model(HiGHS.Optimizer)
 
 	# CONJUNTOS
