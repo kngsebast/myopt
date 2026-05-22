@@ -1,0 +1,128 @@
+import numpy as np
+def colorear_grafo_algebraico(G, k):
+    """Parámetros:
+    - G: Un objeto de tipo Graph de SageMath (o un diccionario de adyacencia).
+    - k: Número de colores (.
+    """
+    # Obtener número de vértices y mapear nombres a índices 0...n-1
+    vertices = list(G.vertices())
+    n = len(vertices)
+    v_to_idx = {v: i for i, v in enumerate(vertices)}
+    
+    #Inicializar el ambiente algebraico (Anillo de Polinomios), el cuerpo es Q
+    #Usanado orden lexicográfico ('lex') 
+    var_names = [f'x{i}' for i in range(n)]
+    R = PolynomialRing(QQ, names=var_names, order='lex')
+    variables = R.gens()
+    
+    polinomios_ideal = []
+    #Restricción de Vértices: x_i^k - 1 = 0
+    for i in range(n):
+        polinomios_ideal.append(variables[i]^k - 1)
+        
+    # Restricción de Aristas: Sumatoria de adyacencia
+    #Si k=2: x_i + x_j = 0
+    #Si k=3: x_i^2 + x_i*x_j + x_j^2 = 0
+    for u, v in G.edges(labels=False):
+        i = v_to_idx[u]
+        j = v_to_idx[v]
+        xi = variables[i]
+        xj = variables[j]
+        
+        #Construccion del polinomio divisor eficientemente usando la sumatoria
+        polinomio_arista = sum(xi^(k - 1 - m) * xj^m for m in range(k))
+        polinomios_ideal.append(polinomio_arista)
+        
+    #ideal
+    I = R.ideal(polinomios_ideal)
+    
+    #base de grobner
+    G_basis = I.groebner_basis()
+    
+    # Criterio de Consistencia. Si la base reducida contiene únicamente al 1, el sistema es inconsistente.
+    if G_basis == [R(1)]:
+        print("El grafo NO es colorable.")
+        print("Certificado algebraico (Base de Gröbner Reducida) = [1]")
+        return None
+    
+    print("El grafo SÍ es colorable.")
+    
+    # La función .variety() de Sage resuelve el sistema triangulado automáticamente
+    # usando algoritmos de eliminación numérica/simbólica exactos en cuerpos afines.
+    soluciones = I.variety(ring=CC)
+    
+    print(f"Se encontraron {len(soluciones)} coloraciones válidas en la variedad afín.\n")
+    
+    #Mostrar los coloreos obtenidos
+    for idx, sol in enumerate(soluciones[:2]):
+        print(f"Coloración #{idx + 1}:")
+        for i in range(n):
+            nodo_original = vertices[i]
+            val_complejo = complex(sol[variables[i]])
+            
+            angulo = np.angle(val_complejo)
+            if angulo < 0:
+                angulo += 2 * np.pi # Normalizar a [0, 2*pi)
+                
+            m = int(round(angulo / (2 * np.pi / k))) % k
+            
+            if m == 0:
+                omega_str = "1"
+            elif m == 1:
+                omega_str = f"ω_1"
+            else:
+                omega_str = f"ω_{m}"
+                
+            print(f"  Vértice {nodo_original} ---> Color geométrico: {omega_str}")
+    return soluciones
+def graficar_coloreo_algebraico(G, soluciones, k):
+    
+    if not soluciones:
+        print("No hay soluciones que graficar.")
+        return
+        
+    primera_sol = soluciones[0]
+    
+    vertices = list(G.vertices())
+    n = len(vertices)
+    paleta_colores = ['#ff4d4d', '#4da6ff', '#5cd65c', '#ffb366', '#cc66ff', '#ffff66']
+    #                  Rojo       Azul       Verde      Naranja    Morado     Amarillo
+    
+    color_map = {}
+    
+    vertices_por_color = {color: [] for color in paleta_colores[:k]}
+
+    for i, v in enumerate(vertices):
+        #Encontrar la variable correspondiente en el anillo de la solución
+        #Buscamr la variable que coincida con el nombre x_i
+        var_anillo = [var for var in primera_sol.keys() if str(var) == f'x{i}'][0]
+        val_complejo = complex(primera_sol[var_anillo])
+        
+        #Calcular el exponente m de la raíz de la unidad (mismo algoritmo anterior)
+        angulo = np.angle(val_complejo)
+        if angulo < 0: angulo += 2 * np.pi
+        m = int(round(angulo / (2 * np.pi / k))) % k
+        
+        #Asignar el color de la paleta según el índice m
+        color_asignado = paleta_colores[m]
+        vertices_por_color[color_asignado].append(v)
+
+    G.show(vertex_colors=vertices_por_color, 
+           vertex_size=500, 
+           edge_thickness=2, 
+           title=f"Grafo Coloreado Eficientemente (k={k})")
+    
+#######################"3#########################################################33##############
+
+#C4 = graphs.CycleGraph(4)
+#colorear_grafo_algebraico(C4, k=2)
+#C5 = graphs.CycleGraph(5)
+#colorear_grafo_algebraico(C5, k=3)
+#G_cualquiera = Graph()
+#G_cualquiera.add_edges([
+#    ('A', 'B'), ('B', 'C'), ('C', 'D'), ('D', 'A'), 
+#    ('A', 'E'), ('B', 'E')                         
+#])
+soluciones = colorear_grafo_algebraico(C5, k=3)
+graficar_coloreo_algebraico(C5, soluciones, k=3)
+print("\n" + "="*50 + "\n")
