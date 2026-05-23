@@ -1,0 +1,92 @@
+#Librerias a utilizar
+import numpy as np 
+import matplotlib.pyplot as plt 
+
+def omega(N, trials): #forma de genear las secuencias. N el tamaño y trials la cantidad
+    return np.random.randint(0, 2, size=(trials, N))
+
+def shift(seq): #operador de corrimiento
+    return np.roll(seq, -1)
+
+def orbit(seq): #orbitas
+    seen = set()
+    current = tuple(seq)
+    orb = []
+    
+    while current not in seen:
+        seen.add(current)
+        orb.append(current)
+        current = tuple(np.roll(current, -1))
+    
+    return orb
+
+# DETECCIÓN DE PERIODICIDAD
+# ============================================================
+
+def is_periodic(seq):
+    """
+    Determina si una secuencia es periódica.
+    """
+    
+    n = len(seq)
+    
+    for k in range(1, n):
+        
+        periodic = True
+        
+        for i in range(n):
+            
+            if seq[i] != seq[(i + k) % n]:
+                periodic = False
+                break
+        
+        if periodic:
+            return True
+    
+    return False
+
+# SIMULACIÓN 1:
+# PROPORCIÓN DE SECUENCIAS PERIÓDICAS
+# ============================================================
+
+def periodicity_experiment(N, trials=2000):
+    
+    samples = omega(N, trials)
+    
+    count = 0
+    
+    for seq in samples:
+        if is_periodic(seq):
+            count += 1
+    
+    return count / trials
+
+
+N = 100
+
+Ns = [4, 10,40, 100, 500, 1000,10000] #Marcadores de cantidad de simulaciones
+
+periodic_probs = []
+
+for n in Ns:
+    
+    p = periodicity_experiment(n, trials=2000)
+    
+    periodic_probs.append(p)
+
+    print(f"N={n} -> proporción periódica ≈ {p}")
+# ============================================================
+# GRÁFICA
+# ============================================================
+
+plt.figure(figsize=(7,4))
+
+plt.plot(Ns, periodic_probs, marker='o')
+
+plt.xlabel("Número de simulaciones")
+plt.ylabel("Proporción de secuencias periódicas")
+plt.title("Aproximación empírica de μ(P)=0")
+
+plt.grid(True)
+
+plt.show()
