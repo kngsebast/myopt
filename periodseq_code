@@ -74,7 +74,7 @@ for n in Ns:
     
     periodic_probs.append(p)
 
-    print(f"N={n} -> proporción periódica ≈ {p}")
+    print(f"Número de simulaciones={n} -> proporción periódica ≈ {p}")
 # ============================================================
 # GRÁFICA
 # ============================================================
