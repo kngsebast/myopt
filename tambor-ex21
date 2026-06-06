@@ -1,0 +1,97 @@
+clear; clc; close all;
+
+%%Parámetros del Problema y de la Simulación
+N = 60;    % Número de términos de la serie
+alpha_param = 1;         % Velocidad de propagación de la onda (alpha del enunciado)
+r = linspace(0, 1, 100); % Vector de radio (0 a 1)
+theta = linspace(0, 2*pi, 100); % Vector angular para la reconstrucción 3D
+t = linspace(0, 4, 120); % Vector de tiempo
+
+f_r = @(r) 1 - r.^2;     % Posición inicial (deformación parabólica)
+g_r = @(r) 0;            % Velocidad inicial (en reposo -> b_n = 0)
+
+%%Ceros de J_0 (k_n)
+k = zeros(1, N);
+% Estimación inicial aproximada de los ceros de J_0
+for n = 1:N
+    % Los ceros de J_0 están espaciados aproximadamente por pi.
+    % Se define un intervalo de búsqueda seguro alrededor de cada estimación.
+    estimacion = pi * (n - 0.25);
+    rango = [estimacion - 1.5, estimacion + 1.5];
+    if rango(1) < 0, rango(1) = 0.1; end % Evitar valores negativos
+    
+    fun_bessel = @(x) besselj(0, x);
+    k(n) = fzero(fun_bessel, rango);
+end
+
+%% 3. Cálculo de los Coeficientes a_n y b_n
+a = zeros(1, N);
+b = zeros(1, N);
+
+for n = 1:N
+    % [J_1(k_n)]^2
+    j1_kn = besselj(1, k(n));
+    denominador = (j1_kn^2) / 2;
+    
+    % Coeficiente a_n 
+    fun_integrando_a = @(r) r .* f_r(r) .* besselj(0, k(n) * r);
+    num_a = integral(fun_integrando_a, 0, 1);
+    a(n) = num_a / denominador;
+    
+    %Coeficiente b_n
+    if isequal(g_r(0), 0) && isequal(g_r(1), 0) % Optimización si está en reposo
+        b(n) = 0;
+    else
+        fun_integrando_b = @(r) r .* g_r(r) .* besselj(0, k(n) * r);
+        num_b = integral(fun_integrando_b, 0, 1);
+        b(n) = num_b / (k(n) * alpha_param * denominador);
+    end
+end
+
+%%Evaluación de la Solución Radial u(r,t)
+[R, T] = meshgrid(r, t);
+U_radial = zeros(size(R));
+
+%Superposición de los N modos vibracionales
+for n = 1:N
+    modo_espacial = besselj(0, k(n) * R);
+    modo_temporal = a(n) * cos(k(n) * alpha_param * T) + b(n) * sin(k(n) * alpha_param * T);
+    U_radial = U_radial + modo_espacial .* modo_temporal;
+end
+
+%% 
+% Mapeo de coordenadas polares a cartesianas para graficar el círculo completo
+[Mesh_R, Mesh_Theta] = meshgrid(r, theta);
+X_cart = Mesh_R .* cos(Mesh_Theta);
+Y_cart = Mesh_R .* sin(Mesh_Theta);
+
+figure('Position', [100, 100, 1000, 450]);
+
+% animación
+for idx = 1:length(t)
+    u_instante = U_radial(idx, :); 
+    Z_cart = repmat(u_instante, length(theta), 1); 
+    
+    % Gráfica de la Membrana 3D
+    subplot(1, 2, 1);
+    surf(X_cart, Y_cart, Z_cart, 'EdgeColor', 'none');
+    colormap("parula");
+    caxis([-1, 1]); % Fijar límites de color para mantener consistencia visual
+    zlim([-1.2, 1.2]);
+    title(sprintf('Vibración de la Membrana Circular (t = %.2f)', t(idx)));
+    xlabel('x'); ylabel('y'); zlabel('Desplazamiento u');
+    view(-37.5, 30);
+    grid on;
+    
+    % Gráfica del Perfil Radial
+    subplot(1, 2, 2);
+    plot(r, u_instante, 'r-', 'LineWidth', 2.5);
+    ylim([-1.2, 1.2]);
+    xlim([0, 1]);
+    title('Perfil de Desplazamiento Radial $u(r,t)$', 'Interpreter', 'latex');
+    xlabel('Radio $r$', 'Interpreter', 'latex');
+    ylabel('Desplazamiento $u$', 'Interpreter', 'latex');
+    grid on;
+    
+    drawnow; % Forzar la actualización de los gráficos en cada iteración
+end
