@@ -1,0 +1,85 @@
+clear; clc; close all;
+
+%%Parámetros del Problema y de la Simulación
+N = 100;  % Número de términos para aproximar la serie
+L = pi; % Longitud del dominio espacial
+x = linspace(0, L, 200); % Vector de espacio
+t = linspace(0, 2, 100); % Vector de tiempo
+
+%% Def f(x)
+f_x = @(x) sin(x)
+
+% Se aproximan las raíces de la ecuación tan(alpha * pi) + alpha = 0
+alpha = zeros(1, N);
+epsilon = 1e-4;
+for n = 1:N
+    % Se define un intervalo estimado para buscar la n-ésima raíz
+    % Las raíces se encuentran en los cuadrantes donde la tangente es negativa
+    if n == 1
+        rango = [0.5 + epsilon, 1.0]; 
+    else
+        rango = [(n - 0.5) + epsilon, n];
+    end
+ 
+    fun_trascendente = @(a) tan(a * pi) + a;
+    
+    fa = fun_trascendente(rango(1));
+    fb = fun_trascendente(rango(2));
+    if fa * fb > 0
+        error('Los valores en los extremos no difieren en signo para n=%d. Ajuste el intervalo.', n);
+    end
+    alpha(n) = fzero(fun_trascendente, rango);
+
+    % Búsqueda de la raíz mediante el método fzero
+    alpha(n) = fzero(fun_trascendente, rango);
+end
+
+%%los  A_n
+A = zeros(1, N);
+for n = 1:N
+    fun_integrando = @(x) f_x(x) .* sin(alpha(n) * x);
+    numerador = integral(fun_integrando, 0, L);
+    denominador = (L / 2) + (cos(alpha(n) * pi)^2 / 2);
+
+    %Coeficiente final
+    A(n) = numerador / denominador;
+end
+
+%% sol
+[X, T] = meshgrid(x, t);
+U = zeros(size(X));
+
+for n = 1:N
+    termino_espacial = sin(alpha(n) * X);
+    termino_temporal = exp(-(alpha(n)^2) * T);
+    U = U + A(n) * termino_espacial .* termino_temporal;
+end
+
+%%visualización gráfica
+figure('Position', [100, 100, 900, 450]);
+
+% Gráfica de Superficie 3D
+subplot(1, 2, 1);
+surf(X, T, U, 'EdgeColor', 'none');
+colormap(jet);
+colorbar;
+view(-45, 30);
+title('Perfil de Temperatura $u(x,t)$', 'Interpreter', 'latex');
+xlabel('Posición $x$', 'Interpreter', 'latex');
+ylabel('Tiempo $t$', 'Interpreter', 'latex');
+zlabel('Temperatura $u$', 'Interpreter', 'latex');
+grid on;
+
+%Gráfica de Líneas
+subplot(1, 2, 2);
+tiempos_muestreo = round(linspace(1, length(t), 6));
+hold on;
+for idx = tiempos_muestreo
+    plot(x, U(idx, :), 'LineWidth', 2, 'DisplayName', sprintf('t = %.2f', t(idx)));
+end
+title('Evolución de $u(x,t)$ en instantes fijos', 'Interpreter', 'latex');
+xlabel('Posición $x$', 'Interpreter', 'latex');
+ylabel('Temperatura $u$', 'Interpreter', 'latex');
+legend('Location', 'best');
+grid on;
+hold off;
